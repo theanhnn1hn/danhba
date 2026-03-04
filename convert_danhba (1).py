@@ -666,6 +666,14 @@ window.onscroll=function(){
 </head>
 <body>
 
+<noscript>
+<div style="background:#dc2626;color:#fff;padding:14px 16px;text-align:center;font-size:14px;position:sticky;top:0;z-index:9999;line-height:1.6">
+<b>JavaScript khong hoat dong!</b> Tim kiem va luu danh ba se khong chay.<br>
+Hay mo file nay bang <b>Safari</b> (khong phai Files app).<br>
+<small>Cach mo: Bam giu file &rarr; Chia se &rarr; Chon Safari</small>
+</div>
+</noscript>
+
 <div class="hdr"><div class="hdr-in">
 <div class="logo">
 <div class="logo-ic">&#9742;</div>
@@ -750,6 +758,64 @@ def main():
     u = "KB" if sz < 1048576 else "MB"
     v = sz/1024 if sz < 1048576 else sz/1048576
     print("Xuat: %s (%.0f%s)" % (out, v, u))
+
+    # Generate companion VCF file with all contacts
+    vcf_out = os.path.splitext(out)[0] + '.vcf'
+    generate_vcf(cats, vcf_out)
+
+
+def generate_vcf(categories, vcf_path):
+    """Generate a single VCF file containing all contacts"""
+    NL = "\r\n"
+    vcards = []
+    count = 0
+
+    def add_contacts(dept, cat_name):
+        nonlocal count
+        for c in dept["contacts"]:
+            parts = c["name"].strip().split()
+            ln = ' '.join(parts[:-1]) if len(parts) > 1 else ''
+            fn = parts[-1] if parts else ''
+
+            v = "BEGIN:VCARD" + NL + "VERSION:3.0" + NL
+            v += "FN:" + c["name"] + NL
+            v += "N:" + ln + ";" + fn + ";;;" + NL
+            if c["phone"]:
+                d = re.sub(r'[^\d]', '', c["phone"])
+                if d.startswith('0'): d = '+84' + d[1:]
+                v += "TEL;TYPE=CELL:" + d + NL
+            if c["position"]:
+                v += "TITLE:" + c["position"] + NL
+            v += "ORG:" + dept["name"] + NL
+            if c["note"]:
+                v += "NOTE:" + c["note"] + NL
+            # Add photo
+            if c["photo"]:
+                import re as re2
+                m = re2.search(r'base64,(.+)', c["photo"])
+                if m:
+                    ptype = "PNG" if "png" in c["photo"] else "JPEG"
+                    v += "PHOTO;ENCODING=b;TYPE=" + ptype + ":" + m.group(1) + NL
+            v += "CATEGORIES:" + cat_name + NL
+            v += "END:VCARD"
+            vcards.append(v)
+            count += 1
+
+    for cat in categories:
+        for dept in cat["departments"]:
+            add_contacts(dept, cat["name"])
+        for sc in cat["subcats"]:
+            for dept in sc["departments"]:
+                add_contacts(dept, cat["name"] + " - " + sc["name"])
+
+    with open(vcf_path, 'w', encoding='utf-8') as f:
+        f.write((NL).join(vcards))
+
+    sz = os.path.getsize(vcf_path)
+    u = "KB" if sz < 1048576 else "MB"
+    sv = sz/1024 if sz < 1048576 else sz/1048576
+    print("VCF: %s (%d lien he, %.0f%s)" % (vcf_path, count, sv, u))
+
 
 if __name__ == '__main__':
     main()

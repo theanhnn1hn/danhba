@@ -249,13 +249,13 @@ def render_contact_card(contact, idx, dept_name, cat_name, subcat_name=""):
     if contact["note"]:
         note_html = '<div class="cc-nt">%s</div>' % esc(contact["note"])
     
-    return '''<div class="cc" data-s="%s" data-v="%s" data-ph="%s">
+    hp_attr = ' data-hp="1"' if has_photo else ''
+    return '''<div class="cc" data-s="%s" data-v="%s"%s>
 <div class="cc-top">%s<div class="cc-info">
 <div class="cc-nm">%s</div>
 <div class="cc-pos">%s</div>%s
 </div></div>%s</div>''' % (
-        esc(search_text), vc_data, 
-        esc(contact["photo"]) if has_photo else "",
+        esc(search_text), vc_data, hp_attr,
         avatar, esc(contact["name"]), esc(contact["position"]),
         note_html, phone_html
     )
@@ -419,9 +419,17 @@ mark{background:rgba(251,191,36,.2);color:#fbbf24;border-radius:2px;padding:0 1p
 
 .toast{position:fixed;bottom:70px;left:50%%;transform:translateX(-50%%);background:#1a2234;border:1px solid rgba(99,179,237,0.2);color:#f0f4f8;padding:8px 16px;border-radius:999px;font-size:.76rem;opacity:0;transition:opacity .3s;z-index:200;white-space:nowrap;pointer-events:none}
 .toast.show{opacity:1}
+
+.loading-overlay{position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;background:#0a0f1e;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:opacity .4s}
+.loading-overlay.done{opacity:0;pointer-events:none}
+.ld-spinner{width:40px;height:40px;border:3px solid rgba(96,165,250,0.2);border-top-color:#60a5fa;border-radius:50%%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.ld-text{margin-top:14px;font-size:.82rem;color:#93c5fd}
 </style>
 </head>
 <body>
+
+<div class="loading-overlay" id="lo"><div class="ld-spinner"></div><div class="ld-text">Đang tải danh bạ...</div></div>
 
 <div class="hdr"><div class="hdr-in">
 <div class="logo">
@@ -474,7 +482,7 @@ var searchTimer = null;
 var viMap = {};
 (function(){
   var from = "àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ";
-  var to   = "aaaaaaaaaaaaaaaaaeeeeeeeeeeeiiiiiooooooooooooooooouuuuuuuuuuuyyyyyđ";
+  var to   = "aaaaaaaaaaaaaaaaaeeeeeeeeeeeiiiiiooooooooooooooooouuuuuuuuuuuyyyyyd";
   // uppercase too
   var fromU = from.toUpperCase();
   var toU = to.toUpperCase();
@@ -484,6 +492,7 @@ var viMap = {};
 
 function rv(s){
   if(!s)return"";
+  if(typeof s.normalize==="function")s=s.normalize("NFC");
   s=s.toLowerCase();
   var r="";
   for(var i=0;i<s.length;i++){r+=viMap[s[i]]||s[i]}
@@ -495,24 +504,33 @@ function doSearch(){
   var nq = rv(q);
   var found = 0;
   var total = allCards.length;
-  
+
+  // Split query into words for AND matching
+  var words = [];
+  if(nq){
+    var parts = nq.split(/\\s+/);
+    for(var w=0;w<parts.length;w++){if(parts[w])words.push(parts[w])}
+  }
+
   for(var i=0;i<allCards.length;i++){
     var card = allCards[i];
     var show = true;
-    
+
     // Filter by category
     if(curFilter !== "all"){
       var catEl = card.parentNode;
       while(catEl && !catEl.getAttribute("data-ci")) catEl = catEl.parentNode;
       if(catEl && catEl.getAttribute("data-ci") !== curFilter) show = false;
     }
-    
-    // Filter by search
-    if(show && nq){
+
+    // Filter by search - each word must match (AND logic)
+    if(show && words.length > 0){
       var searchText = card.getAttribute("data-s") || "";
-      if(searchText.indexOf(nq) < 0) show = false;
+      for(var wi=0;wi<words.length;wi++){
+        if(searchText.indexOf(words[wi]) < 0){show=false;break}
+      }
     }
-    
+
     if(show){card.style.display="";found++}
     else{card.style.display="none"}
   }
@@ -563,12 +581,18 @@ function FT(btn){
   doSearch();
 }
 
+// Get photo src from card img element
+function GP(card){
+  var img = card.querySelector(".av img");
+  return img ? img.getAttribute("src") : "";
+}
+
 // Show photo
 function SP(idx){
   var cards = document.querySelectorAll(".cc");
   if(idx >= cards.length) return;
   var card = cards[idx];
-  var ph = card.getAttribute("data-ph");
+  var ph = GP(card);
   if(!ph) return;
   document.getElementById("mI").src = ph;
   var nm = card.querySelector(".cc-nm");
@@ -595,8 +619,8 @@ function DL(btn){
   if(org) v += "ORG:" + org + "\\n";
   if(nt) v += "NOTE:" + nt + "\\n";
   
-  // Add photo from data attribute
-  var photoSrc = card.getAttribute("data-ph");
+  // Add photo from img element
+  var photoSrc = GP(card);
   if(photoSrc){
     var m = photoSrc.match(/base64,(.+)/);
     if(m){
@@ -652,6 +676,10 @@ window.onscroll = function(){
   var gt = document.getElementById("gt");
   gt.className = window.pageYOffset > 400 ? "go-top show" : "go-top";
 };
+
+// Hide loading overlay
+var lo = document.getElementById("lo");
+if(lo){lo.classList.add("done");setTimeout(function(){lo.style.display="none"},500)}
 </script>
 </body>
 </html>''' % {

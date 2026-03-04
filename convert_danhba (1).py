@@ -372,7 +372,7 @@ a{color:inherit;text-decoration:none}
 .s-wrap{position:relative;margin-bottom:8px}
 .s-in{width:100%%;padding:11px 40px 11px 38px;background:#1a2234;border:1.5px solid rgba(255,255,255,0.06);border-radius:999px;color:#f0f4f8;font-family:inherit;font-size:.88rem;outline:none}
 .s-in:focus{border-color:#60a5fa;box-shadow:0 0 0 3px rgba(96,165,250,0.15)}
-.s-ic{position:absolute;left:14px;top:50%%;transform:translateY(-50%%);color:#64748b;font-size:14px}
+.s-ic{position:absolute;left:4px;top:50%%;transform:translateY(-50%%);color:#64748b;font-size:14px;background:none;border:none;padding:8px 10px;cursor:pointer;-webkit-tap-highlight-color:transparent}
 .s-clr{position:absolute;right:8px;top:50%%;transform:translateY(-50%%);width:26px;height:26px;background:#111827;border:none;border-radius:50%%;color:#94a3b8;font-size:14px;display:none;cursor:pointer}
 
 .stats{display:flex;gap:6px;padding-bottom:8px;overflow-x:auto;-webkit-overflow-scrolling:touch}
@@ -456,11 +456,11 @@ mark{background:rgba(251,191,36,.2);color:#fbbf24;border-radius:2px;padding:0 1p
 <div class="logo-ic">&#9742;</div>
 <div><h1>%(title)s</h1><p>%(subtitle)s</p></div>
 </div>
-<form class="s-wrap" action="javascript:void(0)" onsubmit="doSearch();return false">
+<div class="s-wrap">
 <input type="search" class="s-in" id="si" placeholder="Tìm tên, chức vụ, đơn vị, xã, phường..." autocomplete="off" spellcheck="false" enterkeyhint="search">
-<span class="s-ic">&#128269;</span>
-<button type="button" class="s-clr" id="sc">&times;</button>
-</form>
+<button class="s-ic" id="sb" onclick="doSearch()">&#128269;</button>
+<button class="s-clr" id="sc">&times;</button>
+</div>
 <div class="stats">
 <div class="chip"><b>%(tc)d</b>&nbsp;liên hệ</div>
 <div class="chip"><b>%(td)d</b>&nbsp;đơn vị</div>
@@ -652,21 +652,15 @@ function DL(btn){
   v += "END:VCARD";
 
   var fname = fullName.replace(/\\s+/g,"_") + ".vcf";
-  try{
-    var blob = new Blob([v], {type:"text/vcard"});
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement("a");
-    a.href = url;
-    a.download = fname;
-    a.style.display = "none";
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(function(){document.body.removeChild(a);URL.revokeObjectURL(url)},1000);
-    showToast("Đã tải: " + fullName);
-  }catch(e){
-    // Fallback for older mobile browsers
-    window.location.href = "data:text/vcard;charset=utf-8," + encodeURIComponent(v);
-  }
+  var uri = "data:text/vcard;charset=utf-8," + encodeURIComponent(v);
+  var a = document.createElement("a");
+  a.href = uri;
+  a.download = fname;
+  a.style.display = "none";
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function(){document.body.removeChild(a)},500);
+  showToast("Đã tải: " + fullName);
 }
 
 function showToast(msg){
@@ -679,11 +673,14 @@ function showToast(msg){
 
 // Search input
 var si = document.getElementById("si");
-si.onkeyup = si.onchange = si.oninput = function(){
+si.oninput = function(){
   var v = si.value;
   document.getElementById("sc").style.display = v.length > 0 ? "block" : "none";
   clearTimeout(searchTimer);
   searchTimer = setTimeout(doSearch, 200);
+};
+si.onkeydown = function(e){
+  if(e.keyCode===13||e.key==="Enter"){e.preventDefault();doSearch()}
 };
 
 // Clear search

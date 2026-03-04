@@ -448,6 +448,202 @@ mark{background:rgba(251,191,36,.2);color:#fbbf24;border-radius:2px;padding:0 1p
 .toast.show{opacity:1}
 
 </style>
+<script>
+var allCards,allCats,allDepts;
+var curFilter="all";
+var searchTimer=null;
+
+var viMap={};
+(function(){
+  var from="àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ";
+  var to  ="aaaaaaaaaaaaaaaaaeeeeeeeeeeeiiiiiooooooooooooooooouuuuuuuuuuuyyyyyd";
+  var fromU=from.toUpperCase();
+  var toU=to.toUpperCase();
+  for(var i=0;i<from.length;i++){viMap[from[i]]=to[i];viMap[fromU[i]]=toU[i]}
+  viMap["đ"]="d";viMap["Đ"]="D";
+})();
+
+function rv(s){
+  if(!s)return"";
+  if(typeof s.normalize==="function")s=s.normalize("NFC");
+  s=s.toLowerCase();
+  var r="";
+  for(var i=0;i<s.length;i++){r+=viMap[s[i]]||s[i]}
+  return r;
+}
+
+function _initDom(){
+  if(!allCards){
+    allCards=document.querySelectorAll(".cc");
+    allCats=document.querySelectorAll(".cat");
+    allDepts=document.querySelectorAll(".dept");
+  }
+}
+
+function doSearch(){
+  _initDom();
+  var q=document.getElementById("si").value.trim();
+  var nq=rv(q);
+  var found=0;
+  var total=allCards.length;
+
+  var words=[];
+  if(nq){
+    var parts=nq.split(/\\s+/);
+    for(var w=0;w<parts.length;w++){if(parts[w])words.push(parts[w])}
+  }
+
+  for(var i=0;i<allCards.length;i++){
+    var card=allCards[i];
+    var show=true;
+
+    if(curFilter!=="all"){
+      var catEl=card.parentNode;
+      while(catEl&&!catEl.getAttribute("data-ci"))catEl=catEl.parentNode;
+      if(catEl&&catEl.getAttribute("data-ci")!==curFilter)show=false;
+    }
+
+    if(show&&words.length>0){
+      var searchText=card.getAttribute("data-s")||"";
+      for(var wi=0;wi<words.length;wi++){
+        if(searchText.indexOf(words[wi])<0){show=false;break}
+      }
+    }
+
+    if(show){card.style.display="";found++}
+    else{card.style.display="none"}
+  }
+
+  for(var d=0;d<allDepts.length;d++){
+    var dept=allDepts[d];
+    var cards=dept.querySelectorAll(".cc");
+    var vis=0;
+    for(var c=0;c<cards.length;c++){if(cards[c].style.display!=="none")vis++}
+    dept.style.display=vis>0?"":"none";
+  }
+
+  for(var ci=0;ci<allCats.length;ci++){
+    var cat=allCats[ci];
+    if(curFilter!=="all"&&cat.getAttribute("data-ci")!==curFilter){
+      cat.style.display="none";continue;
+    }
+    var depts=cat.querySelectorAll(".dept");
+    var anyVis=false;
+    for(var dd=0;dd<depts.length;dd++){if(depts[dd].style.display!=="none")anyVis=true}
+    cat.style.display=anyVis?"":"none";
+  }
+
+  var sr=document.getElementById("sr");
+  if(nq){sr.textContent="Tìm thấy: "+found;sr.className="sr show"}
+  else{sr.className="sr"}
+
+  document.getElementById("em").className=found===0?"empty show":"empty";
+}
+
+function TD(el){
+  el.classList.toggle("col");
+  var list=el.nextElementSibling;
+  if(list)list.classList.toggle("hid");
+}
+
+function FT(btn){
+  var tabs=document.querySelectorAll(".ftab");
+  for(var i=0;i<tabs.length;i++)tabs[i].classList.remove("on");
+  btn.classList.add("on");
+  curFilter=btn.getAttribute("data-f");
+  doSearch();
+}
+
+function GP(card){
+  var img=card.querySelector(".av img");
+  return img?img.getAttribute("src"):"";
+}
+
+function SP(idx){
+  _initDom();
+  if(idx>=allCards.length)return;
+  var card=allCards[idx];
+  var ph=GP(card);
+  if(!ph)return;
+  document.getElementById("mI").src=ph;
+  var nm=card.querySelector(".cc-nm");
+  var ps=card.querySelector(".cc-pos");
+  document.getElementById("mN").textContent=nm?nm.textContent:"";
+  document.getElementById("mP").textContent=ps?ps.textContent:"";
+  document.getElementById("modal").classList.add("show");
+}
+
+function DL(btn){
+  var card=btn.parentNode.parentNode;
+  var data=card.getAttribute("data-v");
+  if(!data)return;
+  var parts=data.split("|");
+  var fn=parts[0]||"",ln=parts[1]||"",ph=parts[2]||"",ti=parts[3]||"",org=parts[4]||"",nt=parts[5]||"";
+  var fullName=(ln?ln+" ":"")+fn;
+
+  var NL="\\r\\n";
+  var v="BEGIN:VCARD"+NL+"VERSION:3.0"+NL;
+  v+="FN:"+fullName+NL;
+  v+="N:"+ln+";"+fn+";;;"+NL;
+  if(ph)v+="TEL;TYPE=CELL:"+ph+NL;
+  if(ti)v+="TITLE:"+ti+NL;
+  if(org)v+="ORG:"+org+NL;
+  if(nt)v+="NOTE:"+nt+NL;
+
+  var photoSrc=GP(card);
+  if(photoSrc){
+    var m=photoSrc.match(/base64,(.+)/);
+    if(m){
+      var ptype=photoSrc.indexOf("png")>-1?"PNG":"JPEG";
+      v+="PHOTO;ENCODING=b;TYPE="+ptype+":"+m[1]+NL;
+    }
+  }
+  v+="END:VCARD";
+
+  var fname=fullName.replace(/\\s+/g,"_")+".vcf";
+  var uri="data:text/vcard;charset=utf-8,"+encodeURIComponent(v);
+  var a=document.createElement("a");
+  a.href=uri;
+  a.download=fname;
+  a.style.display="none";
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function(){document.body.removeChild(a)},500);
+  showToast("Đã tải: "+fullName);
+}
+
+function showToast(msg){
+  var t=document.getElementById("toast");
+  t.textContent=msg;
+  t.classList.add("show");
+  clearTimeout(t._t);
+  t._t=setTimeout(function(){t.classList.remove("show")},2500);
+}
+
+document.addEventListener("DOMContentLoaded",function(){
+  _initDom();
+  var si=document.getElementById("si");
+  si.addEventListener("input",function(){
+    var v=si.value;
+    document.getElementById("sc").style.display=v.length>0?"block":"none";
+    clearTimeout(searchTimer);
+    searchTimer=setTimeout(doSearch,200);
+  });
+  si.addEventListener("keydown",function(e){
+    if(e.keyCode===13||e.key==="Enter"){e.preventDefault();doSearch()}
+  });
+  document.getElementById("sc").addEventListener("click",function(){
+    si.value="";
+    this.style.display="none";
+    doSearch();
+    si.focus();
+  });
+  window.addEventListener("scroll",function(){
+    var gt=document.getElementById("gt");
+    gt.className=window.pageYOffset>400?"go-top show":"go-top";
+  });
+});
+</script>
 </head>
 <body>
 
@@ -488,216 +684,6 @@ mark{background:rgba(251,191,36,.2);color:#fbbf24;border-radius:2px;padding:0 1p
 </div>
 </div>
 
-<script>
-// ALL CONTACTS ARE ALREADY IN HTML - JS only handles search/filter/save
-// Pure ES5 - no modern APIs needed
-
-var allCards = document.querySelectorAll(".cc");
-var allCats = document.querySelectorAll(".cat");
-var allDepts = document.querySelectorAll(".dept");
-var curFilter = "all";
-var searchTimer = null;
-
-// Simple Vietnamese diacritics removal (ES5 safe)
-var viMap = {};
-(function(){
-  var from = "àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ";
-  var to   = "aaaaaaaaaaaaaaaaaeeeeeeeeeeeiiiiiooooooooooooooooouuuuuuuuuuuyyyyyd";
-  // uppercase too
-  var fromU = from.toUpperCase();
-  var toU = to.toUpperCase();
-  for(var i=0;i<from.length;i++){viMap[from[i]]=to[i];viMap[fromU[i]]=toU[i]}
-  viMap["đ"]="d";viMap["Đ"]="D";
-})();
-
-function rv(s){
-  if(!s)return"";
-  if(typeof s.normalize==="function")s=s.normalize("NFC");
-  s=s.toLowerCase();
-  var r="";
-  for(var i=0;i<s.length;i++){r+=viMap[s[i]]||s[i]}
-  return r;
-}
-
-function doSearch(){
-  var q = document.getElementById("si").value.trim();
-  var nq = rv(q);
-  var found = 0;
-  var total = allCards.length;
-
-  // Split query into words for AND matching
-  var words = [];
-  if(nq){
-    var parts = nq.split(/\\s+/);
-    for(var w=0;w<parts.length;w++){if(parts[w])words.push(parts[w])}
-  }
-
-  for(var i=0;i<allCards.length;i++){
-    var card = allCards[i];
-    var show = true;
-
-    // Filter by category
-    if(curFilter !== "all"){
-      var catEl = card.parentNode;
-      while(catEl && !catEl.getAttribute("data-ci")) catEl = catEl.parentNode;
-      if(catEl && catEl.getAttribute("data-ci") !== curFilter) show = false;
-    }
-
-    // Filter by search - each word must match (AND logic)
-    if(show && words.length > 0){
-      var searchText = card.getAttribute("data-s") || "";
-      for(var wi=0;wi<words.length;wi++){
-        if(searchText.indexOf(words[wi]) < 0){show=false;break}
-      }
-    }
-
-    if(show){card.style.display="";found++}
-    else{card.style.display="none"}
-  }
-  
-  // Show/hide departments based on visible cards
-  for(var d=0;d<allDepts.length;d++){
-    var dept = allDepts[d];
-    var cards = dept.querySelectorAll(".cc");
-    var vis = 0;
-    for(var c=0;c<cards.length;c++){if(cards[c].style.display!=="none")vis++}
-    dept.style.display = vis > 0 ? "" : "none";
-  }
-  
-  // Show/hide categories
-  for(var ci=0;ci<allCats.length;ci++){
-    var cat = allCats[ci];
-    if(curFilter !== "all" && cat.getAttribute("data-ci") !== curFilter){
-      cat.style.display = "none"; continue;
-    }
-    var depts = cat.querySelectorAll(".dept");
-    var anyVis = false;
-    for(var dd=0;dd<depts.length;dd++){if(depts[dd].style.display!=="none")anyVis=true}
-    cat.style.display = anyVis ? "" : "none";
-  }
-  
-  // Update search result count
-  var sr = document.getElementById("sr");
-  if(nq){sr.textContent="Tìm thấy: "+found;sr.className="sr show"}
-  else{sr.className="sr"}
-  
-  // Empty state
-  document.getElementById("em").className = found===0 ? "empty show" : "empty";
-}
-
-// Toggle department
-function TD(el){
-  el.classList.toggle("col");
-  var list = el.nextElementSibling;
-  if(list) list.classList.toggle("hid");
-}
-
-// Filter tab
-function FT(btn){
-  var tabs = document.querySelectorAll(".ftab");
-  for(var i=0;i<tabs.length;i++) tabs[i].classList.remove("on");
-  btn.classList.add("on");
-  curFilter = btn.getAttribute("data-f");
-  doSearch();
-}
-
-// Get photo src from card img element
-function GP(card){
-  var img = card.querySelector(".av img");
-  return img ? img.getAttribute("src") : "";
-}
-
-// Show photo
-function SP(idx){
-  var cards = document.querySelectorAll(".cc");
-  if(idx >= cards.length) return;
-  var card = cards[idx];
-  var ph = GP(card);
-  if(!ph) return;
-  document.getElementById("mI").src = ph;
-  var nm = card.querySelector(".cc-nm");
-  var ps = card.querySelector(".cc-pos");
-  document.getElementById("mN").textContent = nm ? nm.textContent : "";
-  document.getElementById("mP").textContent = ps ? ps.textContent : "";
-  document.getElementById("modal").classList.add("show");
-}
-
-// Download vCard
-function DL(btn){
-  var card = btn.parentNode.parentNode; // .cc-act -> .cc
-  var data = card.getAttribute("data-v");
-  if(!data) return;
-  var parts = data.split("|"); // fn|ln|phone|title|org|note
-  var fn=parts[0]||"",ln=parts[1]||"",ph=parts[2]||"",ti=parts[3]||"",org=parts[4]||"",nt=parts[5]||"";
-  var fullName = (ln ? ln+" " : "") + fn;
-  
-  var NL = "\\r\\n";
-  var v = "BEGIN:VCARD" + NL + "VERSION:3.0" + NL;
-  v += "FN:" + fullName + NL;
-  v += "N:" + ln + ";" + fn + ";;;" + NL;
-  if(ph) v += "TEL;TYPE=CELL:" + ph + NL;
-  if(ti) v += "TITLE:" + ti + NL;
-  if(org) v += "ORG:" + org + NL;
-  if(nt) v += "NOTE:" + nt + NL;
-
-  // Add photo from img element
-  var photoSrc = GP(card);
-  if(photoSrc){
-    var m = photoSrc.match(/base64,(.+)/);
-    if(m){
-      var ptype = photoSrc.indexOf("png") > -1 ? "PNG" : "JPEG";
-      v += "PHOTO;ENCODING=b;TYPE=" + ptype + ":" + m[1] + NL;
-    }
-  }
-  v += "END:VCARD";
-
-  var fname = fullName.replace(/\\s+/g,"_") + ".vcf";
-  var uri = "data:text/vcard;charset=utf-8," + encodeURIComponent(v);
-  var a = document.createElement("a");
-  a.href = uri;
-  a.download = fname;
-  a.style.display = "none";
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(function(){document.body.removeChild(a)},500);
-  showToast("Đã tải: " + fullName);
-}
-
-function showToast(msg){
-  var t = document.getElementById("toast");
-  t.textContent = msg;
-  t.classList.add("show");
-  clearTimeout(t._t);
-  t._t = setTimeout(function(){t.classList.remove("show")}, 2500);
-}
-
-// Search input
-var si = document.getElementById("si");
-si.oninput = function(){
-  var v = si.value;
-  document.getElementById("sc").style.display = v.length > 0 ? "block" : "none";
-  clearTimeout(searchTimer);
-  searchTimer = setTimeout(doSearch, 200);
-};
-si.onkeydown = function(e){
-  if(e.keyCode===13||e.key==="Enter"){e.preventDefault();doSearch()}
-};
-
-// Clear search
-document.getElementById("sc").onclick = function(){
-  si.value = "";
-  this.style.display = "none";
-  doSearch();
-  si.focus();
-};
-
-// Scroll to top
-window.onscroll = function(){
-  var gt = document.getElementById("gt");
-  gt.className = window.pageYOffset > 400 ? "go-top show" : "go-top";
-};
-
-</script>
 </body>
 </html>''' % {
         'title': esc(title),

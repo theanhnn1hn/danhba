@@ -449,7 +449,6 @@ mark{background:rgba(251,191,36,.2);color:#fbbf24;border-radius:2px;padding:0 1p
 
 </style>
 <script>
-var allCards,allCats,allDepts;
 var curFilter="all";
 var searchTimer=null;
 
@@ -472,20 +471,15 @@ function rv(s){
   return r;
 }
 
-function _initDom(){
-  if(!allCards){
-    allCards=document.querySelectorAll(".cc");
-    allCats=document.querySelectorAll(".cat");
-    allDepts=document.querySelectorAll(".dept");
-  }
-}
-
 function doSearch(){
-  _initDom();
-  var q=document.getElementById("si").value.trim();
+  var allCards=document.querySelectorAll(".cc");
+  var allDepts=document.querySelectorAll(".dept");
+  var allCats=document.querySelectorAll(".cat");
+  var si=document.getElementById("si");
+  if(!si)return;
+  var q=si.value.trim();
   var nq=rv(q);
   var found=0;
-  var total=allCards.length;
 
   var words=[];
   if(nq){
@@ -534,10 +528,36 @@ function doSearch(){
   }
 
   var sr=document.getElementById("sr");
-  if(nq){sr.textContent="Tìm thấy: "+found;sr.className="sr show"}
-  else{sr.className="sr"}
+  if(sr){
+    if(nq){sr.textContent="Tìm thấy: "+found;sr.className="sr show"}
+    else{sr.className="sr"}
+  }
 
-  document.getElementById("em").className=found===0?"empty show":"empty";
+  var em=document.getElementById("em");
+  if(em)em.className=(found===0&&nq)?"empty show":"empty";
+}
+
+function SI(){
+  var si=document.getElementById("si");
+  if(!si)return;
+  var sc=document.getElementById("sc");
+  if(sc)sc.style.display=si.value.length>0?"block":"none";
+  clearTimeout(searchTimer);
+  searchTimer=setTimeout(doSearch,200);
+}
+
+function SK(e){
+  if(e.keyCode===13||e.key==="Enter"){e.preventDefault();doSearch()}
+}
+
+function SC(){
+  var si=document.getElementById("si");
+  if(!si)return;
+  si.value="";
+  var sc=document.getElementById("sc");
+  if(sc)sc.style.display="none";
+  doSearch();
+  si.focus();
 }
 
 function TD(el){
@@ -560,9 +580,9 @@ function GP(card){
 }
 
 function SP(idx){
-  _initDom();
-  if(idx>=allCards.length)return;
-  var card=allCards[idx];
+  var cards=document.querySelectorAll(".cc");
+  if(idx>=cards.length)return;
+  var card=cards[idx];
   var ph=GP(card);
   if(!ph)return;
   document.getElementById("mI").src=ph;
@@ -601,48 +621,47 @@ function DL(btn){
   v+="END:VCARD";
 
   var fname=fullName.replace(/\\s+/g,"_")+".vcf";
-  var uri="data:text/vcard;charset=utf-8,"+encodeURIComponent(v);
-  var a=document.createElement("a");
-  a.href=uri;
-  a.download=fname;
-  a.style.display="none";
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(function(){document.body.removeChild(a)},500);
-  showToast("Đã tải: "+fullName);
+
+  if(navigator.share){
+    try{
+      var file=new File([v],fname,{type:"text/vcard"});
+      if(navigator.canShare&&navigator.canShare({files:[file]})){
+        navigator.share({files:[file]}).then(function(){
+          showToast("Đã chia sẻ: "+fullName);
+        }).catch(function(){});
+        return;
+      }
+    }catch(e){}
+  }
+
+  try{
+    var blob=new Blob([v],{type:"text/vcard"});
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement("a");
+    a.href=url;
+    a.download=fname;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function(){document.body.removeChild(a);URL.revokeObjectURL(url)},1000);
+    showToast("Đã tải: "+fullName);
+  }catch(e){
+    window.location.href="data:text/vcard;charset=utf-8,"+encodeURIComponent(v);
+  }
 }
 
 function showToast(msg){
   var t=document.getElementById("toast");
+  if(!t)return;
   t.textContent=msg;
   t.classList.add("show");
   clearTimeout(t._t);
   t._t=setTimeout(function(){t.classList.remove("show")},2500);
 }
 
-document.addEventListener("DOMContentLoaded",function(){
-  _initDom();
-  var si=document.getElementById("si");
-  si.addEventListener("input",function(){
-    var v=si.value;
-    document.getElementById("sc").style.display=v.length>0?"block":"none";
-    clearTimeout(searchTimer);
-    searchTimer=setTimeout(doSearch,200);
-  });
-  si.addEventListener("keydown",function(e){
-    if(e.keyCode===13||e.key==="Enter"){e.preventDefault();doSearch()}
-  });
-  document.getElementById("sc").addEventListener("click",function(){
-    si.value="";
-    this.style.display="none";
-    doSearch();
-    si.focus();
-  });
-  window.addEventListener("scroll",function(){
-    var gt=document.getElementById("gt");
-    gt.className=window.pageYOffset>400?"go-top show":"go-top";
-  });
-});
+window.onscroll=function(){
+  var gt=document.getElementById("gt");
+  if(gt)gt.className=window.pageYOffset>400?"go-top show":"go-top";
+};
 </script>
 </head>
 <body>
@@ -653,9 +672,9 @@ document.addEventListener("DOMContentLoaded",function(){
 <div><h1>%(title)s</h1><p>%(subtitle)s</p></div>
 </div>
 <div class="s-wrap">
-<input type="search" class="s-in" id="si" placeholder="Tìm tên, chức vụ, đơn vị, xã, phường..." autocomplete="off" spellcheck="false" enterkeyhint="search">
+<input type="search" class="s-in" id="si" placeholder="Tìm tên, chức vụ, đơn vị, xã, phường..." autocomplete="off" spellcheck="false" enterkeyhint="search" oninput="SI()" onkeydown="SK(event)">
 <button class="s-ic" id="sb" onclick="doSearch()">&#128269;</button>
-<button class="s-clr" id="sc">&times;</button>
+<button class="s-clr" id="sc" onclick="SC()">&times;</button>
 </div>
 <div class="stats">
 <div class="chip"><b>%(tc)d</b>&nbsp;liên hệ</div>

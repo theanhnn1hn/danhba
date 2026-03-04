@@ -31,6 +31,25 @@ def remove_vi(text):
     text = re.sub(r'[\u0300-\u036f]', '', text)
     return text.replace('đ', 'd').replace('Đ', 'D').lower()
 
+def is_section_header(name, pos, phone):
+    """Detect if a table row is a section header (unit name), not a contact"""
+    if phone.strip():
+        return False
+    if not name.strip():
+        return False
+    # Remove parenthetical notes like "(05 xã)" for uppercase check
+    core = re.sub(r'\([^)]*\)', '', name).strip()
+    if not core:
+        return False
+    letters = [c for c in core if c.isalpha()]
+    if not letters:
+        return False
+    upper_ratio = sum(1 for c in letters if c.isupper()) / len(letters)
+    # >70% uppercase letters and longer than 3 chars = likely a section header
+    if upper_ratio >= 0.7 and len(core) > 3:
+        return True
+    return False
+
 def phone_to_tel(phone):
     if not phone: return ""
     d = re.sub(r'[^\d]', '', phone)
@@ -169,7 +188,15 @@ def parse_docx(filepath, photos_dir=None):
                 note = clean_text(gc(cm.get('note', 99)))
                 
                 if not name or name.upper() in ('HỌ VÀ TÊN','STT'): continue
-                if not phone and name == name.upper() and len(name) > 5: continue
+
+                # Detect in-table section headers → create new department
+                if is_section_header(name, pos, phone):
+                    cur_dept = {"name": clean_text(name), "contacts": []}
+                    if cur_subcat:
+                        cur_subcat["departments"].append(cur_dept)
+                    else:
+                        cur_cat["departments"].append(cur_dept)
+                    continue
                 
                 photo_uri = ""
                 nn = remove_vi(name)
@@ -234,7 +261,7 @@ def render_contact_card(contact, idx, dept_name, cat_name, subcat_name=""):
     has_photo = bool(contact["photo"])
     
     if has_photo:
-        avatar = '<div class="av ph" onclick="SP(%d)"><img src="%s" alt=""></div>' % (idx, contact["photo"])
+        avatar = '<div class="av ph" onclick="SP(%d)"><img data-src="%s" class="lz" alt=""></div>' % (idx, contact["photo"])
     else:
         avatar = '<div class="av">%s</div>' % esc(get_initial(contact["name"]))
     
@@ -385,6 +412,7 @@ a{color:inherit;text-decoration:none}
 .av.ph{background:#1a2234;cursor:pointer}
 .av:not(.ph){background:linear-gradient(135deg,#60a5fa,#a78bfa)}
 .av img{width:100%%;height:100%%;object-fit:cover;display:block}
+.av img.lz{opacity:0}.av img.ld{opacity:1;transition:opacity .2s}
 
 .cc-info{flex:1;min-width:0}
 .cc-nm{font-size:.88rem;font-weight:600;line-height:1.3}
@@ -420,16 +448,9 @@ mark{background:rgba(251,191,36,.2);color:#fbbf24;border-radius:2px;padding:0 1p
 .toast{position:fixed;bottom:70px;left:50%%;transform:translateX(-50%%);background:#1a2234;border:1px solid rgba(99,179,237,0.2);color:#f0f4f8;padding:8px 16px;border-radius:999px;font-size:.76rem;opacity:0;transition:opacity .3s;z-index:200;white-space:nowrap;pointer-events:none}
 .toast.show{opacity:1}
 
-.loading-overlay{position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;background:#0a0f1e;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:opacity .4s}
-.loading-overlay.done{opacity:0;pointer-events:none}
-.ld-spinner{width:40px;height:40px;border:3px solid rgba(96,165,250,0.2);border-top-color:#60a5fa;border-radius:50%%;animation:spin .8s linear infinite}
-@keyframes spin{to{transform:rotate(360deg)}}
-.ld-text{margin-top:14px;font-size:.82rem;color:#93c5fd}
 </style>
 </head>
 <body>
-
-<div class="loading-overlay" id="lo"><div class="ld-spinner"></div><div class="ld-text">Đang tải danh bạ...</div></div>
 
 <div class="hdr"><div class="hdr-in">
 <div class="logo">
@@ -581,10 +602,11 @@ function FT(btn){
   doSearch();
 }
 
-// Get photo src from card img element
+// Get photo src from card img element (handles lazy loading)
 function GP(card){
   var img = card.querySelector(".av img");
-  return img ? img.getAttribute("src") : "";
+  if(!img) return "";
+  return img.getAttribute("src") || img.getAttribute("data-src") || "";
 }
 
 // Show photo
@@ -677,9 +699,24 @@ window.onscroll = function(){
   gt.className = window.pageYOffset > 400 ? "go-top show" : "go-top";
 };
 
-// Hide loading overlay
-var lo = document.getElementById("lo");
-if(lo){lo.classList.add("done");setTimeout(function(){lo.style.display="none"},500)}
+// Lazy load images
+(function(){
+  var imgs = document.querySelectorAll("img.lz");
+  function loadImg(img){
+    var ds = img.getAttribute("data-src");
+    if(ds){img.src=ds;img.removeAttribute("data-src");img.className="ld"}
+  }
+  if("IntersectionObserver" in window){
+    var obs = new IntersectionObserver(function(entries){
+      for(var i=0;i<entries.length;i++){
+        if(entries[i].isIntersecting){loadImg(entries[i].target);obs.unobserve(entries[i].target)}
+      }
+    },{rootMargin:"300px"});
+    for(var i=0;i<imgs.length;i++) obs.observe(imgs[i]);
+  } else {
+    for(var i=0;i<imgs.length;i++) loadImg(imgs[i]);
+  }
+})();
 </script>
 </body>
 </html>''' % {

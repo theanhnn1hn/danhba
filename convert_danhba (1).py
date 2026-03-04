@@ -261,7 +261,7 @@ def render_contact_card(contact, idx, dept_name, cat_name, subcat_name=""):
     has_photo = bool(contact["photo"])
     
     if has_photo:
-        avatar = '<div class="av ph" onclick="SP(%d)"><img data-src="%s" class="lz" alt=""></div>' % (idx, contact["photo"])
+        avatar = '<div class="av ph" onclick="SP(%d)"><img src="%s" alt=""></div>' % (idx, contact["photo"])
     else:
         avatar = '<div class="av">%s</div>' % esc(get_initial(contact["name"]))
     
@@ -412,7 +412,6 @@ a{color:inherit;text-decoration:none}
 .av.ph{background:#1a2234;cursor:pointer}
 .av:not(.ph){background:linear-gradient(135deg,#60a5fa,#a78bfa)}
 .av img{width:100%%;height:100%%;object-fit:cover;display:block}
-.av img.lz{opacity:0}.av img.ld{opacity:1;transition:opacity .2s}
 
 .cc-info{flex:1;min-width:0}
 .cc-nm{font-size:.88rem;font-weight:600;line-height:1.3}
@@ -457,11 +456,11 @@ mark{background:rgba(251,191,36,.2);color:#fbbf24;border-radius:2px;padding:0 1p
 <div class="logo-ic">&#9742;</div>
 <div><h1>%(title)s</h1><p>%(subtitle)s</p></div>
 </div>
-<div class="s-wrap">
-<input type="text" class="s-in" id="si" placeholder="Tìm tên, chức vụ, đơn vị, xã, phường..." autocomplete="off" spellcheck="false">
+<form class="s-wrap" action="javascript:void(0)" onsubmit="doSearch();return false">
+<input type="search" class="s-in" id="si" placeholder="Tìm tên, chức vụ, đơn vị, xã, phường..." autocomplete="off" spellcheck="false" enterkeyhint="search">
 <span class="s-ic">&#128269;</span>
-<button class="s-clr" id="sc">&times;</button>
-</div>
+<button type="button" class="s-clr" id="sc">&times;</button>
+</form>
 <div class="stats">
 <div class="chip"><b>%(tc)d</b>&nbsp;liên hệ</div>
 <div class="chip"><b>%(td)d</b>&nbsp;đơn vị</div>
@@ -602,11 +601,10 @@ function FT(btn){
   doSearch();
 }
 
-// Get photo src from card img element (handles lazy loading)
+// Get photo src from card img element
 function GP(card){
   var img = card.querySelector(".av img");
-  if(!img) return "";
-  return img.getAttribute("src") || img.getAttribute("data-src") || "";
+  return img ? img.getAttribute("src") : "";
 }
 
 // Show photo
@@ -633,38 +631,41 @@ function DL(btn){
   var fn=parts[0]||"",ln=parts[1]||"",ph=parts[2]||"",ti=parts[3]||"",org=parts[4]||"",nt=parts[5]||"";
   var fullName = (ln ? ln+" " : "") + fn;
   
-  var v = "BEGIN:VCARD\\nVERSION:3.0\\n";
-  v += "FN:" + fullName + "\\n";
-  v += "N:" + ln + ";" + fn + ";;;\\n";
-  if(ph) v += "TEL;TYPE=CELL:" + ph + "\\n";
-  if(ti) v += "TITLE:" + ti + "\\n";
-  if(org) v += "ORG:" + org + "\\n";
-  if(nt) v += "NOTE:" + nt + "\\n";
-  
+  var NL = "\\r\\n";
+  var v = "BEGIN:VCARD" + NL + "VERSION:3.0" + NL;
+  v += "FN:" + fullName + NL;
+  v += "N:" + ln + ";" + fn + ";;;" + NL;
+  if(ph) v += "TEL;TYPE=CELL:" + ph + NL;
+  if(ti) v += "TITLE:" + ti + NL;
+  if(org) v += "ORG:" + org + NL;
+  if(nt) v += "NOTE:" + nt + NL;
+
   // Add photo from img element
   var photoSrc = GP(card);
   if(photoSrc){
     var m = photoSrc.match(/base64,(.+)/);
     if(m){
       var ptype = photoSrc.indexOf("png") > -1 ? "PNG" : "JPEG";
-      v += "PHOTO;ENCODING=b;TYPE=" + ptype + ":" + m[1] + "\\n";
+      v += "PHOTO;ENCODING=b;TYPE=" + ptype + ":" + m[1] + NL;
     }
   }
   v += "END:VCARD";
-  
+
+  var fname = fullName.replace(/\\s+/g,"_") + ".vcf";
   try{
-    var blob = new Blob([v], {type:"text/vcard;charset=utf-8"});
+    var blob = new Blob([v], {type:"text/vcard"});
     var url = URL.createObjectURL(blob);
     var a = document.createElement("a");
     a.href = url;
-    a.download = fullName.replace(/\\s+/g,"_") + ".vcf";
+    a.download = fname;
+    a.style.display = "none";
     document.body.appendChild(a);
     a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    setTimeout(function(){document.body.removeChild(a);URL.revokeObjectURL(url)},1000);
     showToast("Đã tải: " + fullName);
   }catch(e){
-    showToast("Lỗi tải vCard");
+    // Fallback for older mobile browsers
+    window.location.href = "data:text/vcard;charset=utf-8," + encodeURIComponent(v);
   }
 }
 
@@ -699,24 +700,6 @@ window.onscroll = function(){
   gt.className = window.pageYOffset > 400 ? "go-top show" : "go-top";
 };
 
-// Lazy load images
-(function(){
-  var imgs = document.querySelectorAll("img.lz");
-  function loadImg(img){
-    var ds = img.getAttribute("data-src");
-    if(ds){img.src=ds;img.removeAttribute("data-src");img.className="ld"}
-  }
-  if("IntersectionObserver" in window){
-    var obs = new IntersectionObserver(function(entries){
-      for(var i=0;i<entries.length;i++){
-        if(entries[i].isIntersecting){loadImg(entries[i].target);obs.unobserve(entries[i].target)}
-      }
-    },{rootMargin:"300px"});
-    for(var i=0;i<imgs.length;i++) obs.observe(imgs[i]);
-  } else {
-    for(var i=0;i<imgs.length;i++) loadImg(imgs[i]);
-  }
-})();
 </script>
 </body>
 </html>''' % {

@@ -297,9 +297,9 @@ def render_department(dept, start_idx, cat_name, subcat_name=""):
     
     count_badge = '<span class="dept-cnt">%d</span>' % len(dept["contacts"])
     
-    return '''<div class="dept" data-ds="%s">
-<div class="dept-nm" onclick="TD(this)">%s%s<span class="dept-tg">&#9660;</span></div>
-<div class="c-list">%s</div></div>''' % (
+    return '''<details class="dept" data-ds="%s">
+<summary class="dept-nm">%s%s</summary>
+<div class="c-list">%s</div></details>''' % (
         esc(remove_vi(dept["name"])),
         esc(dept["name"]), count_badge,
         '\n'.join(cards)
@@ -394,15 +394,15 @@ a{color:inherit;text-decoration:none}
 .subcat{margin:8px 0;padding-left:0}
 .subcat-nm{font-size:.75rem;font-weight:600;color:#fbbf24;padding:6px 4px;border-bottom:1px solid rgba(251,191,36,0.15);margin-bottom:6px}
 
-.dept{margin-bottom:8px}
-.dept-nm{font-size:.78rem;font-weight:600;color:#94a3b8;padding:6px 4px;display:flex;align-items:center;gap:6px;cursor:pointer;-webkit-tap-highlight-color:transparent}
-.dept-nm::before{content:'';width:3px;height:13px;background:linear-gradient(135deg,#34d399,#60a5fa);border-radius:2px;flex-shrink:0}
-.dept-tg{margin-left:auto;font-size:.6rem;color:#64748b;transition:transform .2s}
-.dept-nm.col .dept-tg{transform:rotate(-90deg)}
+details.dept{margin-bottom:8px}
+details.dept>summary{font-size:.78rem;font-weight:600;color:#94a3b8;padding:6px 4px;display:flex;align-items:center;gap:6px;cursor:pointer;-webkit-tap-highlight-color:transparent;list-style:none}
+details.dept>summary::-webkit-details-marker{display:none}
+details.dept>summary::before{content:'';width:3px;height:13px;background:linear-gradient(135deg,#34d399,#60a5fa);border-radius:2px;flex-shrink:0}
+details.dept>summary::after{content:'\\25B6';margin-left:auto;font-size:.5rem;color:#64748b;transition:transform .2s}
+details.dept[open]>summary::after{content:'\\25BC'}
 .dept-cnt{font-size:.6rem;color:#64748b;background:rgba(255,255,255,0.05);padding:1px 6px;border-radius:999px}
 
 .c-list{display:flex;flex-direction:column;gap:5px}
-.c-list.hid{display:none}
 
 .cc{background:#1a2234;border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:11px;transition:background .15s}
 .cc.hide{display:none}
@@ -513,7 +513,12 @@ function doSearch(){
     var cards=dept.querySelectorAll(".cc");
     var vis=0;
     for(var c=0;c<cards.length;c++){if(cards[c].style.display!=="none")vis++}
-    dept.style.display=vis>0?"":"none";
+    if(words.length>0){
+      dept.style.display=vis>0?"":"none";
+      if(vis>0)dept.open=true;
+    }else{
+      dept.style.display="";
+    }
   }
 
   for(var ci=0;ci<allCats.length;ci++){
@@ -558,12 +563,6 @@ function SC(){
   if(sc)sc.style.display="none";
   doSearch();
   si.focus();
-}
-
-function TD(el){
-  el.classList.toggle("col");
-  var list=el.nextElementSibling;
-  if(list)list.classList.toggle("hid");
 }
 
 function FT(btn){
@@ -667,10 +666,8 @@ window.onscroll=function(){
 <body>
 
 <noscript>
-<div style="background:#dc2626;color:#fff;padding:14px 16px;text-align:center;font-size:14px;position:sticky;top:0;z-index:9999;line-height:1.6">
-<b>JavaScript khong hoat dong!</b> Tim kiem va luu danh ba se khong chay.<br>
-Hay mo file nay bang <b>Safari</b> (khong phai Files app).<br>
-<small>Cach mo: Bam giu file &rarr; Chia se &rarr; Chon Safari</small>
+<div style="background:#1e3a5f;color:#93c5fd;padding:10px 16px;text-align:center;font-size:13px;line-height:1.6;border-bottom:1px solid rgba(96,165,250,0.3)">
+<b>Huong dan:</b> Bam vao ten don vi de mo/dong danh sach. Dung tim kiem cua trinh xem (&#128269; goc tren) de tim nhanh.
 </div>
 </noscript>
 

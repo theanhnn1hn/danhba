@@ -7,7 +7,7 @@ STATIC HTML - works on ALL mobile browsers (iOS Safari, Samsung Internet, Chrome
 No JavaScript rendering required - all content pre-rendered by Python.
 """
 
-import sys, os, re, base64, io, unicodedata, html as htmlmod
+import sys, os, re, base64, io, unicodedata, html as htmlmod, plistlib
 from docx import Document
 from docx.oxml.ns import qn
 
@@ -297,9 +297,9 @@ def render_department(dept, start_idx, cat_name, subcat_name=""):
     
     count_badge = '<span class="dept-cnt">%d</span>' % len(dept["contacts"])
     
-    return '''<details class="dept" data-ds="%s">
-<summary class="dept-nm">%s%s</summary>
-<div class="c-list">%s</div></details>''' % (
+    return '''<div class="dept" data-ds="%s">
+<div class="dept-nm" onclick="TD(this)">%s%s</div>
+<div class="c-list">%s</div></div>''' % (
         esc(remove_vi(dept["name"])),
         esc(dept["name"]), count_badge,
         '\n'.join(cards)
@@ -394,15 +394,15 @@ a{color:inherit;text-decoration:none}
 .subcat{margin:8px 0;padding-left:0}
 .subcat-nm{font-size:.75rem;font-weight:600;color:#fbbf24;padding:6px 4px;border-bottom:1px solid rgba(251,191,36,0.15);margin-bottom:6px}
 
-details.dept{margin-bottom:8px}
-details.dept>summary{font-size:.78rem;font-weight:600;color:#94a3b8;padding:6px 4px;display:flex;align-items:center;gap:6px;cursor:pointer;-webkit-tap-highlight-color:transparent;list-style:none}
-details.dept>summary::-webkit-details-marker{display:none}
-details.dept>summary::before{content:'';width:3px;height:13px;background:linear-gradient(135deg,#34d399,#60a5fa);border-radius:2px;flex-shrink:0}
-details.dept>summary::after{content:'\\25B6';margin-left:auto;font-size:.5rem;color:#64748b;transition:transform .2s}
-details.dept[open]>summary::after{content:'\\25BC'}
+.dept{margin-bottom:8px}
+.dept-nm{font-size:.78rem;font-weight:600;color:#94a3b8;padding:6px 4px;display:flex;align-items:center;gap:6px;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.dept-nm::before{content:'';width:3px;height:13px;background:linear-gradient(135deg,#34d399,#60a5fa);border-radius:2px;flex-shrink:0}
+.dept-nm::after{content:'\\25B6';margin-left:auto;font-size:.5rem;color:#64748b;transition:transform .2s}
+.dept-nm.open::after{transform:rotate(90deg)}
 .dept-cnt{font-size:.6rem;color:#64748b;background:rgba(255,255,255,0.05);padding:1px 6px;border-radius:999px}
+.c-list{display:none}.dept-nm.open+.c-list{display:flex}
 
-.c-list{display:flex;flex-direction:column;gap:5px}
+.c-list{flex-direction:column;gap:5px}
 
 .cc{background:#1a2234;border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:11px;transition:background .15s}
 .cc.hide{display:none}
@@ -471,6 +471,8 @@ function rv(s){
   return r;
 }
 
+function TD(el){el.classList.toggle("open")}
+
 function doSearch(){
   var allCards=document.querySelectorAll(".cc");
   var allDepts=document.querySelectorAll(".dept");
@@ -515,7 +517,7 @@ function doSearch(){
     for(var c=0;c<cards.length;c++){if(cards[c].style.display!=="none")vis++}
     if(words.length>0){
       dept.style.display=vis>0?"":"none";
-      if(vis>0)dept.open=true;
+      if(vis>0){var nm=dept.querySelector(".dept-nm");if(nm)nm.classList.add("open")}
     }else{
       dept.style.display="";
     }
@@ -666,8 +668,8 @@ window.onscroll=function(){
 <body>
 
 <noscript>
-<div style="background:#1e3a5f;color:#93c5fd;padding:10px 16px;text-align:center;font-size:13px;line-height:1.6;border-bottom:1px solid rgba(96,165,250,0.3)">
-<b>Huong dan:</b> Bam vao ten don vi de mo/dong danh sach. Dung tim kiem cua trinh xem (&#128269; goc tren) de tim nhanh.
+<div style="background:#c53030;color:#fff;padding:12px 16px;text-align:center;font-size:13px;line-height:1.6;border-bottom:2px solid #e53e3e">
+<b>Luu y:</b> Trinh xem nay khong ho tro tim kiem va luu. Hay mo file <b>.webarchive</b> (cho iPhone) hoac mo file <b>.html</b> bang trinh duyet (Chrome/Safari).
 </div>
 </noscript>
 
@@ -720,6 +722,27 @@ window.onscroll=function(){
     }
 
 
+# ============ WEBARCHIVE FOR iOS ============
+
+def generate_webarchive(html_content, webarchive_path):
+    """Wrap HTML in Safari's .webarchive format so iOS opens it in Safari (not Quick Look)"""
+    archive = {
+        "WebMainResource": {
+            "WebResourceData": html_content.encode('utf-8'),
+            "WebResourceFrameName": "",
+            "WebResourceMIMEType": "text/html",
+            "WebResourceTextEncodingName": "UTF-8",
+            "WebResourceURL": "about:blank"
+        }
+    }
+    with open(webarchive_path, 'wb') as f:
+        plistlib.dump(archive, f, fmt=plistlib.FMT_BINARY)
+    sz = os.path.getsize(webarchive_path)
+    u = "KB" if sz < 1048576 else "MB"
+    v = sz/1024 if sz < 1048576 else sz/1048576
+    print("iOS: %s (%.0f%s) - Mo bang Safari tren iPhone" % (webarchive_path, v, u))
+
+
 # ============ MAIN ============
 
 def main():
@@ -755,6 +778,10 @@ def main():
     u = "KB" if sz < 1048576 else "MB"
     v = sz/1024 if sz < 1048576 else sz/1048576
     print("Xuat: %s (%.0f%s)" % (out, v, u))
+
+    # Generate .webarchive for iOS (opens in Safari, full JS support)
+    wa_out = os.path.splitext(out)[0] + '.webarchive'
+    generate_webarchive(h, wa_out)
 
     # Generate companion VCF file with all contacts
     vcf_out = os.path.splitext(out)[0] + '.vcf'
